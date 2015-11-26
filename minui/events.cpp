@@ -78,9 +78,8 @@ int ev_init(ev_callback input_cb, void* data) {
                 continue;
             }
 
-            // We assume that only EV_KEY, EV_REL, EV_ABS, and EV_SW event types are ever needed.
-            if (!test_bit(EV_KEY, ev_bits) && !test_bit(EV_REL, ev_bits) && 
-                    !test_bit(EV_SW, ev_bits) && !test_bit(EV_ABS, ev_bits)) {
+            // We assume that only EV_KEY, EV_REL, and EV_SW event types are ever needed.
+            if (!test_bit(EV_KEY, ev_bits) && !test_bit(EV_REL, ev_bits) && !test_bit(EV_SW, ev_bits)) {
                 close(fd);
                 continue;
             }
@@ -99,7 +98,7 @@ int ev_init(ev_callback input_cb, void* data) {
             ev_fdinfo[ev_count].data = data;
             ev_count++;
             ev_dev_count++;
-            if (ev_dev_count == (MAX_DEVICES + MAX_MISC_FDS)) break;
+            if (ev_dev_count == MAX_DEVICES) break;
         }
 
         closedir(dir);
@@ -136,6 +135,23 @@ int ev_add_fd(int fd, ev_callback cb, void* data) {
     }
 
     return ret;
+}
+
+int ev_del_fd(int fd)
+{
+    unsigned n;
+    for (n = 0; n < ev_count; ++n) {
+        if (ev_fdinfo[n].fd == fd) {
+            epoll_ctl(g_epoll_fd, EPOLL_CTL_DEL, fd, NULL);
+            if (n != ev_count-1) {
+                ev_fdinfo[n] = ev_fdinfo[ev_count-1];
+            }
+            ev_count--;
+            ev_misc_count--;
+            return 0;
+        }
+    }
+    return -1;
 }
 
 void ev_exit(void) {
