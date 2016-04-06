@@ -9,8 +9,8 @@
 #include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -42,8 +42,8 @@ static bool sysMapFD(int fd, MemMapping* pMap) {
     pMap->ranges = malloc(sizeof(MappedRange));
     if (pMap->ranges == NULL) {
         LOGE("malloc failed: %s\n", strerror(errno));
-        munmap(memPtr, sb.st_size);
-        return -1;
+        munmap(memPtr, pMap->length);
+        return false;
     }
     pMap->ranges[0].addr = memPtr;
     pMap->ranges[0].length = sb.st_size;
@@ -75,6 +75,7 @@ static int sysMapBlockFile(FILE* mapf, MemMapping* pMap)
         LOGE("failed to parse block map header\n");
         return -1;
     }
+
     if (blksize != 0) {
         blocks = ((size-1) / blksize) + 1;
     }
@@ -95,14 +96,14 @@ static int sysMapBlockFile(FILE* mapf, MemMapping* pMap)
     unsigned char* reserve;
     reserve = mmap64(NULL, blocks * blksize, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0);
     if (reserve == MAP_FAILED) {
-        LOGW("failed to reserve address space: %s\n", strerror(errno));
+        LOGE("failed to reserve address space: %s\n", strerror(errno));
         free(pMap->ranges);
         return -1;
     }
 
     int fd = open(block_dev, O_RDONLY);
     if (fd < 0) {
-        LOGW("failed to open block device %s: %s\n", block_dev, strerror(errno));
+        LOGE("failed to open block device %s: %s\n", block_dev, strerror(errno));
         munmap(reserve, blocks * blksize);
         free(pMap->ranges);
         return -1;
@@ -114,7 +115,7 @@ static int sysMapBlockFile(FILE* mapf, MemMapping* pMap)
     for (i = 0; i < range_count; ++i) {
         size_t start, end;
         if (fscanf(mapf, "%zu %zu\n", &start, &end) != 2) {
-            LOGW("failed to parse range %d in block map\n", i);
+            LOGE("failed to parse range %d in block map\n", i);
             success = false;
             break;
         }
@@ -127,7 +128,7 @@ static int sysMapBlockFile(FILE* mapf, MemMapping* pMap)
 
         void* addr = mmap64(next, length, PROT_READ, MAP_PRIVATE | MAP_FIXED, fd, ((off64_t)start)*blksize);
         if (addr == MAP_FAILED) {
-            LOGW("failed to map block %d: %s\n", i, strerror(errno));
+            LOGE("failed to map block %d: %s\n", i, strerror(errno));
             success = false;
             break;
         }
@@ -170,7 +171,7 @@ int sysMapFile(const char* fn, MemMapping* pMap)
         }
 
         if (sysMapBlockFile(mapf, pMap) != 0) {
-            LOGW("Map of '%s' failed\n", fn);
+            LOGE("Map of '%s' failed\n", fn);
             fclose(mapf);
             return -1;
         }
